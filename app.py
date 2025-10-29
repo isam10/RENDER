@@ -5,6 +5,7 @@ Optimized for Render.com deployment with CPU-based processing
 
 import os
 import io
+import gc
 import logging
 from datetime import datetime
 from flask import Flask, request, send_file, jsonify
@@ -33,7 +34,7 @@ CORS(app, resources={
 })
 
 # Configuration
-MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB (reduced for 512MB RAM limit)
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp'}
 
 # Global session - Initialize once and reuse for all requests
@@ -191,20 +192,33 @@ def remove_background():
         
         # Read image data into memory
         input_data = file.read()
+        input_size_mb = len(input_data) / (1024 * 1024)
+        logger.info(f"Input image size: {input_size_mb:.2f}MB")
         
         # Open image with PIL for validation and potential conversion
         try:
             img = Image.open(io.BytesIO(input_data))
+            original_mode = img.mode
             
             # Convert to RGB if necessary (handles RGBA, grayscale, etc.)
             if img.mode not in ('RGB', 'RGBA'):
                 logger.info(f"Converting image from {img.mode} to RGB")
                 img = img.convert('RGB')
             
-            # Convert back to bytes
-            img_byte_arr = io.BytesIO()
-            img.save(img_byte_arr, format='PNG')
-            input_data = img_byte_arr.getvalue()
+            # Only re-save if we converted the image
+            if original_mode != img.mode:
+                # Convert back to bytes
+                img_byte_arr = io.BytesIO()
+                img.save(img_byte_arr, format='PNG')
+                img_byte_arr.seek(0)
+                # Free old data
+                del input_data
+                input_data = img_byte_arr.getvalue()
+                del img_byte_arr
+            
+            # Close image to free memory
+            img.close()
+            del img
             
         except Exception as e:
             logger.error(f"Failed to open/process image: {str(e)}")
@@ -215,19 +229,37 @@ def remove_background():
         
         # Remove background using rembg
         logger.info("Removing background...")
-        output_data = remove(
-            input_data,
-            session=rembg_session,
-            post_process_mask=True  # Improves edge quality
-        )
+        try:
+            output_data = remove(
+                input_data,
+                session=rembg_session,
+                post_process_mask=True  # Improves edge quality
+            )
+            
+            # Free input data immediately after processing
+            del input_data
+            
+        except Exception as e:
+            logger.error(f"Background removal failed: {str(e)}")
+            return jsonify({
+                "error": "Processing failed",
+                "message": "Failed to remove background. Image might be too large or corrupted."
+            }), 500
         
         # Create output image in memory
         output_image = io.BytesIO(output_data)
         output_image.seek(0)
         
+        # Log output size
+        output_size_mb = len(output_data) / (1024 * 1024)
+        logger.info(f"Output image size: {output_size_mb:.2f}MB")
+        
         # Calculate processing time
         processing_time = (datetime.now() - start_time).total_seconds()
         logger.info(f"Background removed successfully in {processing_time:.2f}s")
+        
+        # Force garbage collection to free memory
+        gc.collect()
         
         # Return PNG with transparent background
         return send_file(
@@ -239,6 +271,8 @@ def remove_background():
     
     except Exception as e:
         logger.error(f"Error processing request: {str(e)}", exc_info=True)
+        # Force garbage collection even on error
+        gc.collect()
         return jsonify({
             "error": "Internal server error",
             "message": "An error occurred while processing your image. Please try again."
