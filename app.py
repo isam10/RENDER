@@ -199,22 +199,36 @@ def remove_background():
         try:
             img = Image.open(io.BytesIO(input_data))
             original_mode = img.mode
+            original_size = img.size
+            needs_processing = False
+            
+            # Resize if image is very large (to save memory during processing)
+            MAX_DIMENSION = 2048  # Max width or height
+            if max(img.size) > MAX_DIMENSION:
+                logger.info(f"Image too large ({img.size}), resizing to max {MAX_DIMENSION}px")
+                ratio = MAX_DIMENSION / max(img.size)
+                new_size = tuple(int(dim * ratio) for dim in img.size)
+                img = img.resize(new_size, Image.Resampling.LANCZOS)
+                needs_processing = True
+                logger.info(f"Resized to {img.size}")
             
             # Convert to RGB if necessary (handles RGBA, grayscale, etc.)
             if img.mode not in ('RGB', 'RGBA'):
                 logger.info(f"Converting image from {img.mode} to RGB")
                 img = img.convert('RGB')
+                needs_processing = True
             
-            # Only re-save if we converted the image
-            if original_mode != img.mode:
+            # Only re-save if we modified the image
+            if needs_processing or original_mode != img.mode:
                 # Convert back to bytes
                 img_byte_arr = io.BytesIO()
-                img.save(img_byte_arr, format='PNG')
+                img.save(img_byte_arr, format='PNG', optimize=True)
                 img_byte_arr.seek(0)
                 # Free old data
                 del input_data
                 input_data = img_byte_arr.getvalue()
                 del img_byte_arr
+                logger.info(f"Processed image size: {len(input_data) / (1024 * 1024):.2f}MB")
             
             # Close image to free memory
             img.close()
