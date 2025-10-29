@@ -1,0 +1,27 @@
+services:
+  # Background Removal API Web Service
+  - type: web
+    name: background-removal-api
+    runtime: python
+    plan: free
+    region: oregon  # Change to your preferred region
+    branch: main
+    
+    # Build configuration
+    buildCommand: pip install -r requirements.txt
+    
+    # Start command using gunicorn
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --timeout 120 --preload
+    
+    # Health check endpoint
+    healthCheckPath: /health
+    
+    # Environment variables (optional)
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: FLASK_ENV
+        value: production
+    
+    # Auto-deploy on git push
+    autoDeploy: true
