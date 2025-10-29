@@ -5,17 +5,17 @@ Werkzeug==3.0.1
 
 # Background Removal
 rembg==2.0.67
-# Core dependencies for rembg
-onnxruntime==1.16.3
-pillow==10.1.0
+# Core dependencies for rembg (compatible with Python 3.13)
+onnxruntime>=1.20.0
+pillow>=10.1.0
 numpy>=1.22,<2.0
-scikit-image==0.22.0
-scipy==1.11.4
-tqdm==4.66.1
-pooch==1.8.0
+scikit-image>=0.22.0
+scipy>=1.11.4
+tqdm>=4.66.1
+pooch>=1.8.0
 
 # WSGI Server for Production
-gunicorn==21.2.0
+gunicorn>=21.2.0
 
 # Additional utilities
-python-dotenv==1.0.0
+python-dotenv>=1.0.0
