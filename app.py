@@ -51,6 +51,9 @@ def init_model():
         logger.error(f"Failed to initialize model: {str(e)}")
         raise
 
+# Initialize model when module loads (for gunicorn)
+init_model()
+
 def allowed_file(filename):
     """Check if file extension is allowed"""
     return '.' in filename and \
