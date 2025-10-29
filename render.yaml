@@ -11,7 +11,7 @@ services:
     buildCommand: pip install -r requirements.txt
     
     # Start command using gunicorn
-    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --timeout 120 --preload
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --timeout 120
     
     # Health check endpoint
     healthCheckPath: /health

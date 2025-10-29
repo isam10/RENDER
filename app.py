@@ -39,20 +39,34 @@ ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp'}
 # Global session - Initialize once and reuse for all requests
 # This significantly improves performance by keeping the model in memory
 rembg_session = None
+_model_loading = False
 
 def init_model():
     """Initialize rembg model on startup"""
-    global rembg_session
+    global rembg_session, _model_loading
+    
+    if rembg_session is not None:
+        return  # Already initialized
+    
+    if _model_loading:
+        return  # Already loading
+    
+    _model_loading = True
     try:
         logger.info("Initializing rembg model (isnet-general-use)...")
         rembg_session = new_session("isnet-general-use")
         logger.info("Model initialized successfully!")
     except Exception as e:
         logger.error(f"Failed to initialize model: {str(e)}")
+        _model_loading = False
         raise
+    finally:
+        _model_loading = False
 
-# Initialize model when module loads (for gunicorn)
-init_model()
+def ensure_model_loaded():
+    """Ensure model is loaded, initialize if needed"""
+    if rembg_session is None and not _model_loading:
+        init_model()
 
 def allowed_file(filename):
     """Check if file extension is allowed"""
@@ -137,9 +151,20 @@ def remove_background():
     logger.info(f"[{start_time.isoformat()}] New background removal request")
     
     try:
-        # Check if model is initialized
+        # Ensure model is loaded (lazy loading on first request)
         if rembg_session is None:
-            logger.error("Model not initialized")
+            logger.info("Model not loaded, initializing now...")
+            try:
+                ensure_model_loaded()
+            except Exception as e:
+                logger.error(f"Failed to load model: {str(e)}")
+                return jsonify({
+                    "error": "Service initialization failed",
+                    "message": "Could not load background removal model. Please try again."
+                }), 503
+        
+        # Double check after loading attempt
+        if rembg_session is None:
             return jsonify({
                 "error": "Service not ready",
                 "message": "Background removal model is not loaded"
